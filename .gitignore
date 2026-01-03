@@ -1,5 +1,5 @@
 # Python
-venv/
+backend/venv/
 __pycache__/
 *.pyc
 *.pyo
@@ -16,5 +16,6 @@ node_modules/
 uploads/
 
 # OS files
+
 .DS_Store
 .env

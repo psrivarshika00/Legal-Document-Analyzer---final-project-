@@ -157,34 +157,58 @@ def upload_file():
 
     return jsonify({"error": "Invalid file type. Only PDFs allowed."}), 400
 
+
+# Load QA model once globally
+qa_pipeline = pipeline("question-answering", model="deepset/bert-base-cased-squad2")
+
 @app.route("/qa", methods=["POST"])
-def extract_legal_clauses():
-    data = request.get_json()
-    context = data.get("text", "")
+def question_answering():
+    if 'file' not in request.files or 'question' not in request.form:
+        return jsonify({"error": "File or question missing"}), 400
 
-    if not context:
-        return jsonify({"error": "No input text provided"}), 400
+    file = request.files['file']
+    question = request.form['question']
 
-    questions = [
-        "What is the governing law?",
-        "Who are the parties involved?",
-        "What is the agreement date?",
-        "What is the termination clause?",
-        "What is the confidentiality clause?",
-        "What are the payment terms?",
-        "What are the indemnification terms?",
-        "What is the jurisdiction clause?"
-    ]
+    pdf_reader = PdfReader(file)
+    full_text = ""
+    for page in pdf_reader.pages:
+        full_text += page.extract_text()
 
-    answers = {}
-    for question in questions:
-        try:
-            result = qa_pipeline({"context": context, "question": question})
-            answers[question] = result["answer"]
-        except Exception as e:
-            answers[question] = f"Error: {str(e)}"
+    result = qa_pipeline(question=question, context=full_text)
 
-    return jsonify({"clauses": answers})
+    # if result['score'] < 0.15:
+    #     return jsonify({"answer": "No relevant information found about pets in the document."})
+
+    return jsonify({"answer": result["answer"]})
+
+# @app.route("/qa", methods=["POST"])
+# def extract_legal_clauses():
+#     data = request.get_json()
+#     context = data.get("text", "")
+
+#     if not context:
+#         return jsonify({"error": "No input text provided"}), 400
+
+#     questions = [
+#         "What is the governing law?",
+#         "Who are the parties involved?",
+#         "What is the agreement date?",
+#         "What is the termination clause?",
+#         "What is the confidentiality clause?",
+#         "What are the payment terms?",
+#         "What are the indemnification terms?",
+#         "What is the jurisdiction clause?"
+#     ]
+
+#     answers = {}
+#     for question in questions:
+#         try:
+#             result = qa_pipeline({"context": context, "question": question})
+#             answers[question] = result["answer"]
+#         except Exception as e:
+#             answers[question] = f"Error: {str(e)}"
+
+#     return jsonify({"clauses": answers})
 
 # @app.route("/risk", methods=["POST"])
 # def detect_risky_clauses():
