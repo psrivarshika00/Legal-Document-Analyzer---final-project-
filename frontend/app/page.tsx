@@ -119,7 +119,7 @@
 
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import axios from "axios";
 
 export default function Home() {
@@ -127,6 +127,21 @@ export default function Home() {
   const [result, setResult] = useState("");
   const [loading, setLoading] = useState(false);
   const [question, setQuestion] = useState("");
+  const [summaries, setSummaries] = useState<any[]>([]);
+  const [showSidebar, setShowSidebar] = useState(false);
+
+  useEffect(() => {
+    fetchSummaries();
+  }, []);
+
+  const fetchSummaries = async () => {
+    try {
+      const response = await axios.get("http://127.0.0.1:5000/summaries");
+      setSummaries(response.data);
+    } catch (error) {
+      console.error("Error fetching summaries:", error);
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0] || null;
@@ -157,13 +172,18 @@ export default function Home() {
       );
 
       if (type === "summarize") {
-        setResult(response.data.summary);
+        setResult(`**Fast Summary:**\n${response.data.fast_summary}\n\n**Accurate Summary:**\n${response.data.accurate_summary}`);
+        fetchSummaries(); // Refresh summaries
       } else if (type === "risk") {
         const risks = response.data.risky_clauses;
         setResult(JSON.stringify(risks, null, 2));
       }
     } catch (error) {
-      setResult("Error processing file.");
+      if (axios.isAxiosError(error) && error.response?.data?.error) {
+        setResult(`Error: ${error.response.data.error}`);
+      } else {
+        setResult("Error processing file.");
+      }
       console.error(error);
     } finally {
       setLoading(false);
@@ -201,7 +221,46 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-gray-100 to-white p-6">
+    <>
+      {/* Sidebar */}
+      <div className={`fixed inset-y-0 left-0 z-50 w-80 bg-white shadow-lg transform ${showSidebar ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-300 ease-in-out`}>
+        <div className="p-4">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold">Saved Summaries</h2>
+            <button
+              onClick={() => setShowSidebar(false)}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="space-y-4 max-h-screen overflow-y-auto">
+            {summaries.map((summary, index) => (
+              <div key={index} className="border rounded p-3 bg-gray-50">
+                <h3 className="font-semibold">{summary.filename}</h3>
+                <p className="text-sm text-gray-600">{new Date(summary.timestamp).toLocaleString()}</p>
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-blue-600">Fast Summary</summary>
+                  <p className="text-sm mt-1">{summary.fast_summary}</p>
+                </details>
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-blue-600">Accurate Summary</summary>
+                  <p className="text-sm mt-1">{summary.accurate_summary}</p>
+                </details>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Main content */}
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-gray-100 to-white p-6">
+        <button
+          onClick={() => setShowSidebar(!showSidebar)}
+          className="fixed top-4 left-4 z-40 bg-blue-600 text-white px-4 py-2 rounded shadow"
+        >
+          {showSidebar ? 'Hide' : 'Show'} Summaries
+        </button>
       <h1 className="text-4xl font-bold mb-8 text-center text-blue-700">
         📄 Legal Document Analyzer
       </h1>
@@ -243,7 +302,7 @@ export default function Home() {
         </button>
       </div>
 
-      <div className="flex flex-col w-full max-w-md space-y-2 mb-4">
+      <div className="flex flex-col w-full max-w-md space-y-3 mb-4">
         <input
           type="text"
           placeholder="Enter your legal question"
@@ -270,5 +329,6 @@ export default function Home() {
         </div>
       )}
     </div>
+    </>
   );
 }

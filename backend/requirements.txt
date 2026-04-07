@@ -3,3 +3,5 @@ flask-cors
 transformers
 torch
 PyPDF2
+pdfplumber
+pymongo
