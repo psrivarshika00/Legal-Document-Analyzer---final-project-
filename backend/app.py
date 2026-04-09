@@ -107,7 +107,8 @@ app = Flask(__name__)
 CORS(app)
 
 # MongoDB setup
-client = MongoClient('mongodb://localhost:27017/')
+mongo_uri = os.environ.get('MONGO_URI', 'mongodb://localhost:27017/')
+client = MongoClient(mongo_uri)
 db = client['legal_analyzer']
 summaries_collection = db['summaries']
 

@@ -122,6 +122,8 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState("");
@@ -136,7 +138,7 @@ export default function Home() {
 
   const fetchSummaries = async () => {
     try {
-      const response = await axios.get("http://127.0.0.1:5000/summaries");
+      const response = await axios.get(`${API_BASE}/summaries`);
       setSummaries(response.data);
     } catch (error) {
       console.error("Error fetching summaries:", error);
@@ -164,7 +166,7 @@ export default function Home() {
     try {
       const endpoint = type === "summarize" ? "/summarize" : "/risk";
       const response = await axios.post(
-        `http://127.0.0.1:5000${endpoint}`,
+        `${API_BASE}${endpoint}`,
         formData,
         {
           headers: { "Content-Type": "multipart/form-data" },
@@ -205,7 +207,7 @@ export default function Home() {
 
     try {
       const response = await axios.post(
-        "http://127.0.0.1:5000/qa",
+        `${API_BASE}/qa`,
         formData,
         {
           headers: { "Content-Type": "multipart/form-data" },
