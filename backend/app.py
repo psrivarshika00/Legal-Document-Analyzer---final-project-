@@ -209,12 +209,9 @@ def upload_file():
     return jsonify({"error": "Invalid file type. Only PDFs allowed."}), 400
 
 
-# Load QA model once globally - moved to /qa route
-# qa_pipeline = pipeline("question-answering", model="deepset/bert-base-cased-squad2")
-
 @app.route("/qa", methods=["POST"])
 def question_answering():
-    # Load QA model
+    # Lazy load QA model on first request
     qa_pipeline = pipeline("question-answering", model="deepset/bert-base-cased-squad2")
 
     if 'file' not in request.files or 'question' not in request.form:
@@ -326,12 +323,16 @@ UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
-## Summarization models - moved to summarize function
-# fast_summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
-# accurate_summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")  # Use same model for now
+## Summarization models - lazy loading
+# Models are loaded only when summarize() is called to reduce startup memory
+
+def get_summarizer(quality: str):
+    """Lazy load summarization model on first use."""
+    model_name = "sshleifer/distilbart-cnn-12-6"
+    return pipeline("summarization", model=model_name)
 
 def preprocess_text(text: str) -> str:
-    # Simple preprocessing: remove extra whitespace and normalize
+    """Simple preprocessing: remove extra whitespace and normalize."""
     return ' '.join(text.split())
 
 @app.route("/summarize", methods=["POST"])
@@ -446,13 +447,8 @@ def split_text_into_chunks(text: str, max_chars: int = 1500) -> list[str]:
     return chunks
 
 
-def get_summarizer(quality: str):
-    # Load summarization model
-    model_name = "sshleifer/distilbart-cnn-12-6"
-    return pipeline("summarization", model=model_name)
-
-
 def summarize_text(text: str, quality: str = "fast") -> str:
+    """Summarize text using lazy-loaded model."""
     text = re.sub(r'\s+', ' ', text).strip()
     max_input_chars = 3000 if quality == "fast" else 6000
     if len(text) > max_input_chars:
