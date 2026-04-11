@@ -104,7 +104,7 @@ from flask_cors import CORS
 
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
 # MongoDB setup
 mongo_uri = os.environ.get('MONGO_URI', 'mongodb://localhost:27017/')
@@ -328,7 +328,9 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
 def get_summarizer(quality: str):
     """Lazy load summarization model on first use."""
-    model_name = "sshleifer/distilbart-cnn-12-6"
+    # Use LED (Longformer Encoder-Decoder) for long legal documents
+    # It can handle up to 16,384 tokens (much better than DistilBART's 1024)
+    model_name = "allenai/led-large-16384-arxiv"
     return pipeline("summarization", model=model_name)
 
 def preprocess_text(text: str) -> str:
@@ -406,7 +408,7 @@ def summarize():
         # Save to database
         try:
             client.admin.command('ping')  # Test connection
-            summaries_collection.update_one(
+            result = summaries_collection.update_one(
                 {'filename': file.filename},
                 {'$set': {
                     'file_hash': file_hash,
@@ -416,8 +418,11 @@ def summarize():
                 }},
                 upsert=True
             )
+            print(f"✅ Saved to DB - Matched: {result.matched_count}, Upserted ID: {result.upserted_id}")
         except Exception as e:
-            print(f"DB save failed: {e}")
+            print(f"❌ DB save failed: {e}")
+            import traceback
+            traceback.print_exc()
         
         return jsonify({'fast_summary': fast_summary, 'accurate_summary': accurate_summary, 'cached': False})
 
@@ -448,36 +453,67 @@ def split_text_into_chunks(text: str, max_chars: int = 1500) -> list[str]:
 
 
 def summarize_text(text: str, quality: str = "fast") -> str:
-    """Summarize text using lazy-loaded model."""
+    """Summarize text using lazy-loaded LED model."""
     text = re.sub(r'\s+', ' ', text).strip()
-    max_input_chars = 3000 if quality == "fast" else 6000
+    
+    # LED can handle much longer input (up to 16384 tokens)
+    # Roughly 1 token = 4 characters, so ~65K characters
+    max_input_chars = 20000 if quality == "fast" else 40000
     if len(text) > max_input_chars:
         text = text[:max_input_chars]
-    if len(text) < 1200:
-        return get_summarizer(quality)(text, max_length=150, min_length=50, do_sample=False)[0]['summary_text']
-
-    chunk_size = 2000 if quality == "fast" else 2500
-    chunks = split_text_into_chunks(text, max_chars=chunk_size)
-    chunk_summaries: list[str] = []
-    for chunk in chunks[:3]:  # Limit to 3 chunks
-        chunk_summary = get_summarizer(quality)(
-            chunk,
-            max_length=100 if quality == "fast" else 120,
-            min_length=30 if quality == "fast" else 50,
-            do_sample=False
-        )[0]['summary_text']
-        chunk_summaries.append(chunk_summary)
-
-    combined_summary = ' '.join(chunk_summaries)
-    if len(combined_summary) > 1000:
-        combined_summary = get_summarizer(quality)(
-            combined_summary,
-            max_length=120 if quality == "fast" else 150,
-            min_length=40 if quality == "fast" else 60,
-            do_sample=False
-        )[0]['summary_text']
-
-    return combined_summary
+    
+    if len(text) < 500:
+        # Too short, just return as-is
+        return text
+    
+    try:
+        # For short documents, summarize directly
+        if len(text) < 4000:
+            summary = get_summarizer(quality)(
+                text,
+                max_length=200 if quality == "fast" else 300,
+                min_length=100 if quality == "fast" else 150,
+                do_sample=False
+            )[0]['summary_text']
+            return summary
+        
+        # For longer documents, split into chunks
+        chunk_size = 8000 if quality == "fast" else 12000
+        chunks = split_text_into_chunks(text, max_chars=chunk_size)
+        chunk_summaries: list[str] = []
+        
+        for chunk in chunks[:2]:  # Process first 2 chunks
+            try:
+                chunk_summary = get_summarizer(quality)(
+                    chunk,
+                    max_length=150 if quality == "fast" else 200,
+                    min_length=80 if quality == "fast" else 100,
+                    do_sample=False
+                )[0]['summary_text']
+                chunk_summaries.append(chunk_summary)
+            except Exception as e:
+                print(f"Error summarizing chunk: {e}")
+                continue
+        
+        if not chunk_summaries:
+            return text[:500]  # Fallback
+        
+        combined_summary = ' '.join(chunk_summaries)
+        
+        # Final pass to consolidate
+        if len(combined_summary) > 1000:
+            final_summary = get_summarizer(quality)(
+                combined_summary,
+                max_length=200 if quality == "fast" else 300,
+                min_length=100 if quality == "fast" else 150,
+                do_sample=False
+            )[0]['summary_text']
+            return final_summary
+        
+        return combined_summary
+    except Exception as e:
+        print(f"Summarization error: {e}")
+        return text[:500]  # Fallback
 
 
 @app.route("/summaries", methods=["GET"])
@@ -487,5 +523,5 @@ def get_summaries():
 
 # ------------------ Main ------------------
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, host="0.0.0.0", port=5001)
 
