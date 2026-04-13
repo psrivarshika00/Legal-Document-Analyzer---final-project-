@@ -6,4 +6,6 @@ PyPDF2
 pdfplumber
 pymongo
 gunicorn
-/Users/varshikamac/Desktop/final_project/backend/requirements.txt
+python-dotenv 
+boto3
+werkzeug

@@ -90,28 +90,154 @@
 
 
 from flask import Flask, request, jsonify
+import boto3
+from werkzeug.utils import secure_filename
 from transformers import pipeline
 from werkzeug.utils import secure_filename
 from PyPDF2 import PdfReader
 import pdfplumber
-import torch
 import re
 import hashlib
 from pymongo import MongoClient
 from datetime import datetime
 import os
 from flask_cors import CORS
+from dotenv import load_dotenv
 
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
 # MongoDB setup
-mongo_uri = os.environ.get('MONGO_URI', 'mongodb://localhost:27017/')
-client = MongoClient(mongo_uri)
-db = client['legal_analyzer']
+MONGODB_URI = os.getenv("MONGODB_URI", 'mongodb://localhost:27017/')
+DB_NAME = os.getenv("DB_NAME", "legal_analyzer")
+
+client = MongoClient(MONGODB_URI)
+db = client[DB_NAME]
 summaries_collection = db['summaries']
 
+#S3 configuration
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+AWS_REGION = os.getenv("AWS_REGION")
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+
+s3 = boto3.client(
+    "s3",
+    aws_access_key_id=AWS_ACCESS_KEY_ID,
+    aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+    region_name=AWS_REGION
+)
+
+@app.route("/", methods=["GET"])
+def home():
+    return jsonify({"message": "Backend is running"})
+
+@app.route("/test-db", methods=["GET"])
+def test_db():
+    try:
+        result = db.documents.insert_one({"message": "MongoDB Atlas connected"})
+        return jsonify({
+            "status": "success",
+            "message": "Connected to MongoDB Atlas",
+            "inserted_id": str(result.inserted_id),
+            "database": db.name,
+            "collection": "documents"
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+@app.route("/check-docs", methods=["GET"])
+def check_docs():
+    try:
+        docs = list(db.documents.find({}, {"message": 1}))
+        for doc in docs:
+            doc["_id"] = str(doc["_id"])
+        return jsonify({
+            "status": "success",
+            "count": len(docs),
+            "documents": docs
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+@app.route("/mongo-info", methods=["GET"])
+def mongo_info():
+    try:
+        collections = db.list_collection_names()
+        count = db.documents.count_documents({})
+
+        safe_uri = None
+        if MONGODB_URI:
+            parts = MONGODB_URI.split("@")
+            if len(parts) == 2:
+                safe_uri = "mongodb+srv://***:***@" + parts[1]
+            else:
+                safe_uri = "masked"
+
+        return jsonify({
+            "status": "success",
+            "database": db.name,
+            "collections": collections,
+            "documents_count": count,
+            "mongo_uri": safe_uri
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+    
+@app.route("/first-doc", methods=["GET"])
+def first_doc():
+    doc = db.documents.find_one()
+    if doc:
+        doc["_id"] = str(doc["_id"])
+        return jsonify(doc)
+    return jsonify({"message": "No document found"})
+
+@app.route("/upload-s3", methods=["POST"])
+def upload_file_s3():
+    try:
+        if "file" not in request.files:
+            return jsonify({"status": "error", "message": "No file part in request"}), 400
+
+        file = request.files["file"]
+
+        if file.filename == "":
+            return jsonify({"status": "error", "message": "No file selected"}), 400
+
+        filename = secure_filename(file.filename)
+
+        s3.upload_fileobj(
+            file,
+            S3_BUCKET_NAME,
+            filename,
+            ExtraArgs={"ContentType": file.content_type or "application/octet-stream"}
+        )
+
+        file_url = f"https://{S3_BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{filename}"
+
+        db.documents.insert_one({
+            "filename": filename,
+            "file_url": file_url
+        })
+
+        return jsonify({
+            "status": "success",
+            "file_url": file_url
+        })
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    
 # ------------------ Config ------------------
 UPLOAD_FOLDER = "uploads"
 ALLOWED_EXTENSIONS = {"pdf"}
@@ -280,11 +406,6 @@ def question_answering():
 
 #     return jsonify({"risky_clauses": risks})
 
-
-UPLOAD_FOLDER = "uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-
 @app.route('/risk', methods=['POST'])
 def detect_risk():
     if 'file' not in request.files:
@@ -317,11 +438,6 @@ def detect_risk():
     
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
-
-UPLOAD_FOLDER = "uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
 ## Summarization models - lazy loading
 # Models are loaded only when summarize() is called to reduce startup memory

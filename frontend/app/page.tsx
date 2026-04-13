@@ -151,6 +151,25 @@ export default function Home() {
     setResult("");
   };
 
+  const uploadCurrentFileToS3 = async (): Promise<string> => {
+    if (!file) {
+      throw new Error("Please upload a file first.");
+    }
+
+    const s3FormData = new FormData();
+    s3FormData.append("file", file);
+
+    const response = await axios.post(
+      `${API_BASE}/upload-s3`,
+      s3FormData,
+      {
+        headers: { "Content-Type": "multipart/form-data" },
+      }
+    );
+
+    return response.data.file_url;
+  };
+
   const handleUpload = async (type: "summarize" | "risk") => {
     if (!file) {
       setResult("Please upload a file first.");
@@ -164,6 +183,7 @@ export default function Home() {
     setResult("");
 
     try {
+      await uploadCurrentFileToS3();
       const endpoint = type === "summarize" ? "/summarize" : "/risk";
       const response = await axios.post(
         `${API_BASE}${endpoint}`,
@@ -181,10 +201,45 @@ export default function Home() {
         setResult(JSON.stringify(risks, null, 2));
       }
     } catch (error) {
-      if (axios.isAxiosError(error) && error.response?.data?.error) {
-        setResult(`Error: ${error.response.data.error}`);
+      if (axios.isAxiosError(error)) {
+        const serverMessage =
+          error.response?.data?.error || error.response?.data?.message;
+        setResult(serverMessage ? `Error: ${serverMessage}` : "Error processing file.");
       } else {
-        setResult("Error processing file.");
+        setResult(error instanceof Error ? `Error: ${error.message}` : "Error processing file.");
+      }
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUploadToS3 = async () => {
+    if (!file) {
+      setResult("Please upload a file first.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    setLoading(true);
+    setResult("");
+
+    try {
+      const response = await axios.post(
+        `${API_BASE}/upload-s3`,
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        }
+      );
+      setResult(`Uploaded to S3:\n${response.data.file_url}`);
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.data?.message) {
+        setResult(`Error: ${error.response.data.message}`);
+      } else {
+        setResult("Error uploading file to S3.");
       }
       console.error(error);
     } finally {
@@ -206,6 +261,7 @@ export default function Home() {
     setResult("");
 
     try {
+      await uploadCurrentFileToS3();
       const response = await axios.post(
         `${API_BASE}/qa`,
         formData,
@@ -215,7 +271,13 @@ export default function Home() {
       );
       setResult(response.data.answer);
     } catch (error) {
-      setResult("Error answering question.");
+      if (axios.isAxiosError(error)) {
+        const serverMessage =
+          error.response?.data?.error || error.response?.data?.message;
+        setResult(serverMessage ? `Error: ${serverMessage}` : "Error answering question.");
+      } else {
+        setResult(error instanceof Error ? `Error: ${error.message}` : "Error answering question.");
+      }
       console.error(error);
     } finally {
       setLoading(false);
@@ -256,7 +318,7 @@ export default function Home() {
       </div>
 
       {/* Main content */}
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-gray-100 to-white p-6">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-linear-to-b from-gray-100 to-white p-6">
         <button
           onClick={() => setShowSidebar(!showSidebar)}
           className="fixed top-4 left-4 z-40 bg-blue-600 text-white px-4 py-2 rounded shadow"
@@ -290,6 +352,12 @@ export default function Home() {
       </label>
 
       <div className="flex space-x-4 mb-4">
+        <button
+          onClick={handleUploadToS3}
+          className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-6 py-2 rounded shadow"
+        >
+          Upload to S3
+        </button>
         <button
           onClick={() => handleUpload("summarize")}
           className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded shadow"
