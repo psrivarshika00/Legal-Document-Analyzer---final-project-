@@ -14,6 +14,10 @@ node_modules/
 
 # Uploads
 uploads/
+backend/uploads/
+
+# Build artifacts
+backend-deploy.zip
 
 # OS files
 

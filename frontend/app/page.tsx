@@ -128,9 +128,13 @@ export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState("");
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
   const [summaries, setSummaries] = useState<any[]>([]);
   const [showSidebar, setShowSidebar] = useState(false);
+  const [uploadedFileSig, setUploadedFileSig] = useState<string | null>(null);
+  const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSummaries();
@@ -145,29 +149,71 @@ export default function Home() {
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0] || null;
     setFile(selectedFile);
     setResult("");
+    setUploadedFileSig(null);
+    setUploadedUrl(null);
+    setUploadError(null);
+
+    if (!selectedFile) return;
+
+    // Upload immediately on select
+    const sig = getFileSig(selectedFile);
+    const s3FormData = new FormData();
+    s3FormData.append("file", selectedFile);
+
+    setUploading(true);
+    try {
+      const response = await axios.post(`${API_BASE}/upload-s3`, s3FormData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const url = response.data.file_url as string;
+      setUploadedFileSig(sig);
+      setUploadedUrl(url);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const serverMessage =
+          error.response?.data?.error || error.response?.data?.message;
+        setUploadError(serverMessage || "Error uploading file to S3.");
+      } else {
+        setUploadError(error instanceof Error ? error.message : "Error uploading file to S3.");
+      }
+    } finally {
+      setUploading(false);
+    }
   };
 
-  const uploadCurrentFileToS3 = async (): Promise<string> => {
+  const getFileSig = (f: File) => `${f.name}:${f.size}:${f.lastModified}`;
+
+  const ensureUploadedToS3 = async (): Promise<string> => {
     if (!file) {
       throw new Error("Please upload a file first.");
+    }
+
+    const sig = getFileSig(file);
+    if (uploadedUrl && uploadedFileSig === sig) {
+      return uploadedUrl;
     }
 
     const s3FormData = new FormData();
     s3FormData.append("file", file);
 
-    const response = await axios.post(
-      `${API_BASE}/upload-s3`,
-      s3FormData,
-      {
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const response = await axios.post(`${API_BASE}/upload-s3`, s3FormData, {
         headers: { "Content-Type": "multipart/form-data" },
-      }
-    );
+      });
 
-    return response.data.file_url;
+      const url = response.data.file_url as string;
+      setUploadedFileSig(sig);
+      setUploadedUrl(url);
+      return url;
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleUpload = async (type: "summarize" | "risk") => {
@@ -183,7 +229,7 @@ export default function Home() {
     setResult("");
 
     try {
-      await uploadCurrentFileToS3();
+      await ensureUploadedToS3();
       const endpoint = type === "summarize" ? "/summarize" : "/risk";
       const response = await axios.post(
         `${API_BASE}${endpoint}`,
@@ -194,11 +240,14 @@ export default function Home() {
       );
 
       if (type === "summarize") {
-        setResult(`**Fast Summary:**\n${response.data.fast_summary}\n\n**Accurate Summary:**\n${response.data.accurate_summary}`);
+        console.log("Summarize response:", response.data);
+        setResult(`**Summary:**\n${response.data.summary}`);
         fetchSummaries(); // Refresh summaries
       } else if (type === "risk") {
         const risks = response.data.risky_clauses;
-        setResult(JSON.stringify(risks, null, 2));
+        // Format risky clauses as readable text
+        const formatted = risks.map((clause: string) => `• ${clause}`).join('\n');
+        setResult(`**Risk Clauses Detected:**\n\n${formatted}`);
       }
     } catch (error) {
       if (axios.isAxiosError(error)) {
@@ -207,39 +256,6 @@ export default function Home() {
         setResult(serverMessage ? `Error: ${serverMessage}` : "Error processing file.");
       } else {
         setResult(error instanceof Error ? `Error: ${error.message}` : "Error processing file.");
-      }
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleUploadToS3 = async () => {
-    if (!file) {
-      setResult("Please upload a file first.");
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append("file", file);
-
-    setLoading(true);
-    setResult("");
-
-    try {
-      const response = await axios.post(
-        `${API_BASE}/upload-s3`,
-        formData,
-        {
-          headers: { "Content-Type": "multipart/form-data" },
-        }
-      );
-      setResult(`Uploaded to S3:\n${response.data.file_url}`);
-    } catch (error) {
-      if (axios.isAxiosError(error) && error.response?.data?.message) {
-        setResult(`Error: ${error.response.data.message}`);
-      } else {
-        setResult("Error uploading file to S3.");
       }
       console.error(error);
     } finally {
@@ -261,7 +277,7 @@ export default function Home() {
     setResult("");
 
     try {
-      await uploadCurrentFileToS3();
+      await ensureUploadedToS3();
       const response = await axios.post(
         `${API_BASE}/qa`,
         formData,
@@ -304,12 +320,8 @@ export default function Home() {
                 <h3 className="font-semibold">{summary.filename}</h3>
                 <p className="text-sm text-gray-600">{new Date(summary.timestamp).toLocaleString()}</p>
                 <details className="mt-2">
-                  <summary className="cursor-pointer text-blue-600">Fast Summary</summary>
-                  <p className="text-sm mt-1">{summary.fast_summary}</p>
-                </details>
-                <details className="mt-2">
-                  <summary className="cursor-pointer text-blue-600">Accurate Summary</summary>
-                  <p className="text-sm mt-1">{summary.accurate_summary}</p>
+                  <summary className="cursor-pointer text-blue-600">Summary</summary>
+                  <p className="text-sm mt-1">{summary.summary}</p>
                 </details>
               </div>
             ))}
@@ -342,6 +354,15 @@ export default function Home() {
             Click here to upload a PDF file
           </span>
         )}
+        {file && uploading && (
+          <div className="mt-2 text-xs text-gray-500">Uploading to S3…</div>
+        )}
+        {file && !uploading && uploadedUrl && uploadedFileSig === getFileSig(file) && (
+          <div className="mt-2 text-xs text-gray-500">Uploaded to S3</div>
+        )}
+        {file && uploadError && (
+          <div className="mt-2 text-xs text-red-600">S3 upload failed: {uploadError}</div>
+        )}
         <input
           id="file-upload"
           type="file"
@@ -352,12 +373,6 @@ export default function Home() {
       </label>
 
       <div className="flex space-x-4 mb-4">
-        <button
-          onClick={handleUploadToS3}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-6 py-2 rounded shadow"
-        >
-          Upload to S3
-        </button>
         <button
           onClick={() => handleUpload("summarize")}
           className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded shadow"
@@ -394,7 +409,7 @@ export default function Home() {
         <div className="mt-6 w-full max-w-3xl bg-white p-4 rounded shadow border">
           <h2 className="font-semibold mb-2 text-lg text-gray-800">Result:</h2>
           <pre className="whitespace-pre-wrap text-sm text-gray-700">
-            {result}
+            {result.replace(/\\n/g, '\n')}
           </pre>
         </div>
       )}
