@@ -302,26 +302,42 @@ export default function Home() {
 
   return (
     <>
+      <style>{`
+        @keyframes float {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-20px); }
+        }
+        .float-animation {
+          animation: float 6s ease-in-out infinite;
+        }
+        .bg-pattern {
+          background-image: 
+            radial-gradient(circle at 20% 50%, rgba(59, 130, 246, 0.08) 0%, transparent 50%),
+            radial-gradient(circle at 80% 80%, rgba(37, 99, 235, 0.06) 0%, transparent 50%);
+          backdrop-filter: blur(50px);
+        }
+      `}</style>
+      
       {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-50 w-80 bg-white shadow-lg transform ${showSidebar ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-300 ease-in-out`}>
+      <div className={`fixed inset-y-0 left-0 z-50 w-80 bg-white/95 backdrop-blur shadow-xl transform ${showSidebar ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-300 ease-in-out`}>
         <div className="p-4">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold">Saved Summaries</h2>
+            <h2 className="text-xl font-bold text-gray-900">Saved Summaries</h2>
             <button
               onClick={() => setShowSidebar(false)}
-              className="text-gray-500 hover:text-gray-700"
+              className="text-gray-500 hover:text-gray-700 transition"
             >
               ✕
             </button>
           </div>
           <div className="space-y-4 max-h-screen overflow-y-auto">
             {summaries.map((summary, index) => (
-              <div key={index} className="border rounded p-3 bg-gray-50">
-                <h3 className="font-semibold">{summary.filename}</h3>
-                <p className="text-sm text-gray-600">{new Date(summary.timestamp).toLocaleString()}</p>
+              <div key={index} className="border border-gray-200 rounded-lg p-3 bg-linear-to-br from-blue-50 to-white hover:shadow-md transition">
+                <h3 className="font-semibold text-gray-900">{summary.filename}</h3>
+                <p className="text-xs text-gray-500 mt-1">{new Date(summary.timestamp).toLocaleString()}</p>
                 <details className="mt-2">
-                  <summary className="cursor-pointer text-blue-600">Summary</summary>
-                  <p className="text-sm mt-1">{summary.summary}</p>
+                  <summary className="cursor-pointer text-blue-600 text-sm font-medium hover:text-blue-700">View summary</summary>
+                  <p className="text-sm mt-2 text-gray-700">{summary.summary}</p>
                 </details>
               </div>
             ))}
@@ -329,91 +345,148 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Main content */}
-      <div className="min-h-screen flex flex-col items-center justify-center bg-linear-to-b from-gray-100 to-white p-6">
-        <button
-          onClick={() => setShowSidebar(!showSidebar)}
-          className="fixed top-4 left-4 z-40 bg-blue-600 text-white px-4 py-2 rounded shadow"
-        >
-          {showSidebar ? 'Hide' : 'Show'} Summaries
-        </button>
-      <h1 className="text-4xl font-bold mb-8 text-center text-blue-700">
-        📄 Legal Document Analyzer
-      </h1>
+      {/* Main content with gradient background */}
+      <div className="min-h-screen relative bg-linear-to-br from-slate-900 via-blue-900 to-slate-900 overflow-hidden">
+        {/* Animated background pattern */}
+        <div className="absolute inset-0 bg-pattern opacity-40"></div>
+        
+        {/* Decorative floating elements */}
+        <div className="absolute top-10 right-10 w-72 h-72 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 float-animation"></div>
+        <div className="absolute -bottom-8 left-20 w-80 h-80 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 float-animation" style={{ animationDelay: '2s' }}></div>
+        <div className="absolute top-1/2 left-1/3 w-96 h-96 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10 float-animation" style={{ animationDelay: '4s' }}></div>
 
-      <label
-        htmlFor="file-upload"
-        className="cursor-pointer w-full max-w-md border-2 border-dashed border-blue-400 bg-white rounded-lg p-6 text-center text-gray-600 hover:bg-blue-50 transition mb-6"
-      >
-        {file ? (
-          <span className="text-sm font-medium text-gray-700">
-            ✅ {file.name}
-          </span>
-        ) : (
-          <span className="text-sm font-medium">
-            Click here to upload a PDF file
-          </span>
-        )}
-        {file && uploading && (
-          <div className="mt-2 text-xs text-gray-500">Uploading to S3…</div>
-        )}
-        {file && !uploading && uploadedUrl && uploadedFileSig === getFileSig(file) && (
-          <div className="mt-2 text-xs text-gray-500">Uploaded to S3</div>
-        )}
-        {file && uploadError && (
-          <div className="mt-2 text-xs text-red-600">S3 upload failed: {uploadError}</div>
-        )}
-        <input
-          id="file-upload"
-          type="file"
-          accept=".pdf"
-          onChange={handleFileChange}
-          className="hidden"
-        />
-      </label>
+        {/* Content container */}
+        <div className="relative z-10 flex flex-col items-center justify-center min-h-screen p-6">
+          <button
+            onClick={() => setShowSidebar(!showSidebar)}
+            className="fixed top-4 left-4 z-40 bg-white/90 backdrop-blur text-gray-900 px-4 py-2 rounded-lg shadow-lg hover:shadow-xl transition border border-white/20"
+          >
+            {showSidebar ? 'Hide' : 'Show'} Summaries
+          </button>
+          
+          <div className="mb-8 text-center">
+            <div className="inline-block">
+              <h1 className="text-5xl sm:text-6xl font-extrabold mb-2 bg-linear-to-r from-blue-300 via-blue-100 to-indigo-300 bg-clip-text text-transparent">
+                ⚖️ Legal Document Analyzer
+              </h1>
+            </div>
+            <p className="text-blue-100 text-lg max-w-md mx-auto">
+              Upload PDFs, analyze contracts, and detect legal risks with AI precision
+            </p>
+          </div>
 
-      <div className="flex space-x-4 mb-4">
-        <button
-          onClick={() => handleUpload("summarize")}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded shadow"
-        >
-          Summarize
-        </button>
-        <button
-          onClick={() => handleUpload("risk")}
-          className="bg-red-600 hover:bg-red-700 text-white font-semibold px-6 py-2 rounded shadow"
-        >
-          Detect Risk Clauses
-        </button>
-      </div>
+          <div className="w-full max-w-2xl space-y-6">
+            {/* Upload Card */}
+            <div className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-8 shadow-2xl hover:shadow-3xl transition">
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold text-white mb-2">Upload & Analyze</h2>
+                <p className="text-blue-100 text-sm">Upload a PDF to get started</p>
+              </div>
+              
+              <label
+                htmlFor="file-upload"
+                className="cursor-pointer block border-2 border-dashed border-blue-300 bg-white/5 hover:bg-white/10 rounded-xl p-8 text-center transition duration-300"
+              >
+                {file ? (
+                  <span className="text-sm font-medium text-green-300">
+                    ✅ {file.name}
+                  </span>
+                ) : (
+                  <div>
+                    <div className="text-3xl mb-2">📄</div>
+                    <span className="text-base font-medium text-white">
+                      Click to upload a PDF
+                    </span>
+                    <p className="text-xs text-blue-200 mt-1">or drag and drop</p>
+                  </div>
+                )}
+                {file && uploading && (
+                  <div className="mt-3 text-xs text-yellow-300 animate-pulse">⏳ Uploading to S3…</div>
+                )}
+                {file && !uploading && uploadedUrl && uploadedFileSig === getFileSig(file) && (
+                  <div className="mt-3 text-xs text-green-300">✓ Uploaded</div>
+                )}
+                {file && uploadError && (
+                  <div className="mt-3 text-xs text-red-300">✘ Upload failed: {uploadError}</div>
+                )}
+                <input
+                  id="file-upload"
+                  type="file"
+                  accept=".pdf"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+              </label>
 
-      <div className="flex flex-col w-full max-w-md space-y-3 mb-4">
-        <input
-          type="text"
-          placeholder="Enter your legal question"
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          className="border border-gray-300 rounded px-4 py-2 w-full text-black"
-        />
-        <button
-          onClick={handleQA}
-          className="bg-purple-600 hover:bg-purple-700 text-white font-semibold px-6 py-2 rounded shadow"
-        >
-          Ask Question
-        </button>
-      </div>
+              {/* Action Buttons */}
+              <div className="mt-6 grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => handleUpload("summarize")}
+                  disabled={loading || uploading}
+                  className="bg-linear-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold py-3 rounded-lg shadow-lg hover:shadow-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  📋 Summarize
+                </button>
+                <button
+                  onClick={() => handleUpload("risk")}
+                  disabled={loading || uploading}
+                  className="bg-linear-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold py-3 rounded-lg shadow-lg hover:shadow-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  ⚠️ Risk Check
+                </button>
+              </div>
+            </div>
 
-      {loading && <p className="text-gray-500 text-sm">Processing...</p>}
+            {/* Q&A Card */}
+            <div className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-8 shadow-2xl">
+              <h2 className="text-xl font-bold text-white mb-4">Ask a Question</h2>
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  placeholder="E.g., What is the contract termination date?"
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                  className="w-full bg-white/10 border border-white/20 text-white placeholder-blue-200 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
+                />
+                <button
+                  onClick={handleQA}
+                  disabled={loading || uploading}
+                  className="w-full bg-linear-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-semibold py-3 rounded-lg shadow-lg hover:shadow-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  🔍 Ask
+                </button>
+              </div>
+            </div>
 
-      {result && (
-        <div className="mt-6 w-full max-w-3xl bg-white p-4 rounded shadow border">
-          <h2 className="font-semibold mb-2 text-lg text-gray-800">Result:</h2>
-          <pre className="whitespace-pre-wrap text-sm text-gray-700">
-            {result.replace(/\\n/g, '\n')}
-          </pre>
+            {/* Loading State */}
+            {(loading || uploading) && (
+              <div className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-4 text-center">
+                <p className="text-blue-200 text-sm flex items-center justify-center gap-2">
+                  <span className="animate-spin">⏳</span> {uploading ? "Uploading…" : "Processing…"}
+                </p>
+              </div>
+            )}
+
+            {/* Result Card */}
+            {result && (
+              <div className="bg-white/95 backdrop-blur rounded-2xl p-6 shadow-2xl">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-bold text-lg text-gray-900">Result</h2>
+                  <button
+                    onClick={() => setResult("")}
+                    className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-900 px-3 py-1 rounded-lg transition"
+                  >
+                    Clear
+                  </button>
+                </div>
+                <pre className="whitespace-pre-wrap text-sm text-gray-800 leading-relaxed max-h-96 overflow-y-auto">
+                  {result.replace(/\\n/g, '\n')}
+                </pre>
+              </div>
+            )}
+          </div>
         </div>
-      )}
-    </div>
+      </div>
     </>
   );
 }
