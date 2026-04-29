@@ -554,6 +554,7 @@ def detect_risk():
         sentences = [s.strip() for s in sentences if len(s.strip()) > 20]
         
         risky_clauses = []
+        # Loop through sentences and find ones with these keywordsx``
         for sentence in sentences:
             sentence_lower = sentence.lower()
             for risk_type, keywords in risk_keywords.items():

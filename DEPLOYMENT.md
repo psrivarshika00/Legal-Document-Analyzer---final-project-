@@ -557,8 +557,8 @@ http://<frontend-public-ip>
 ## Part 9: QUICK REDEPLOYMENT STEPS (Current IPs)
 
 **Current Active IPs:**
-- **Backend EC2**: `35.174.18.100:5001`
-- **Frontend EC2**: `100.48.70.132`
+- **Backend EC2**: `54.160.22.184:5001`
+- **Frontend EC2**: `44.222.104.163`
 - **Key file**: `/Users/varshikamac/Downloads/legal-keypair.pem`
 
 ### Step 1: Build and Push Frontend Locally
@@ -575,7 +575,7 @@ git push origin main
 ### Step 2: SSH into Frontend EC2 and Redeploy
 
 ```bash
-ssh -i /Users/varshikamac/Downloads/legal-keypair.pem ubuntu@100.48.70.132 << 'EOFCMD'
+ssh -i /Users/varshikamac/Downloads/legal-keypair.pem ubuntu@44.222.104.163 << 'EOFCMD'
 cd /home/ubuntu/Legal-Document-Analyzer---final-project-/frontend
 git pull origin main
 npm install
@@ -591,9 +591,9 @@ EOFCMD
 If backend IP changes, update this file on frontend EC2:
 
 ```bash
-ssh -i /Users/varshikamac/Downloads/legal-keypair.pem ubuntu@100.48.70.132 << 'EOFCMD'
+ssh -i /Users/varshikamac/Downloads/legal-keypair.pem ubuntu@44.222.104.163 << 'EOFCMD'
 cat > /home/ubuntu/Legal-Document-Analyzer---final-project-/frontend/.env.production << 'EOF'
-NEXT_PUBLIC_API_URL=http://35.174.18.100:5001
+NEXT_PUBLIC_API_URL=http://54.160.22.184:5001
 EOF
 cat /home/ubuntu/Legal-Document-Analyzer---final-project-/frontend/.env.production
 EOFCMD
@@ -602,7 +602,7 @@ EOFCMD
 Then rebuild:
 
 ```bash
-ssh -i /Users/varshikamac/Downloads/legal-keypair.pem ubuntu@100.48.70.132 << 'EOFCMD'
+ssh -i /Users/varshikamac/Downloads/legal-keypair.pem ubuntu@44.222.104.163 << 'EOFCMD'
 cd /home/ubuntu/Legal-Document-Analyzer---final-project-/frontend
 npm run build
 pm2 restart legal-analyzer-frontend
@@ -613,7 +613,7 @@ EOFCMD
 ### Step 4: Check Backend is Running
 
 ```bash
-ssh -i /Users/varshikamac/Downloads/legal-keypair.pem ubuntu@35.174.18.100 << 'EOFCMD'
+ssh -i /Users/varshikamac/Downloads/legal-keypair.pem ubuntu@54.160.22.184 << 'EOFCMD'
 sudo systemctl status legal-analyzer-backend
 sudo systemctl start legal-analyzer-backend || true
 curl http://127.0.0.1:5001/
@@ -624,10 +624,10 @@ EOFCMD
 
 ```bash
 # Test backend
-curl http://35.174.18.100:5001/
+curl http://54.160.22.184:5001/
 
 # Test frontend (in browser or curl)
-curl http://100.48.70.132 | head -c 200
+curl http://44.222.104.163 | head -c 200
 ```
 
 ---
@@ -638,7 +638,7 @@ curl http://100.48.70.132 | head -c 200
 **Location**: `/Users/varshikamac/Desktop/final_project/frontend/.env.production`
 **Current Content**:
 ```env
-NEXT_PUBLIC_API_URL=http://35.174.18.100:5001
+NEXT_PUBLIC_API_URL=http://54.160.22.184:5001
 ```
 **If backend IP changes**: Update this file with new backend IP, then:
 ```bash
@@ -664,7 +664,7 @@ npm run build
 ## Conclusion
 
 Your **Legal Document Analyzer** is now deployed on two separate EC2 instances:
-- **Backend**: Flask API running on `http://35.174.18.100:5001`
-- **Frontend**: Next.js app running on `http://100.48.70.132`
+- **Backend**: Flask API running on `http://54.160.22.184:5001`
+- **Frontend**: Next.js app running on `http://44.222.104.163`
 
 Both instances are configured for automatic startup and restart on failure. Use Part 9 for quick redeployment steps.
