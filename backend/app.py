@@ -103,6 +103,7 @@ from pymongo import MongoClient
 from datetime import datetime
 import os
 import tempfile
+from pathlib import Path
 from flask_cors import CORS
 from dotenv import load_dotenv
 
@@ -134,11 +135,16 @@ s3 = boto3.client(
     region_name=AWS_REGION
 )
 
+# Local storage configuration
+LOCAL_UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), "uploads")
+Path(LOCAL_UPLOAD_FOLDER).mkdir(parents=True, exist_ok=True)
+USE_LOCAL_STORAGE = os.getenv("USE_LOCAL_STORAGE", "false").lower() == "true"
+
 @app.route("/", methods=["GET"])
 def home():
     return jsonify({"message": "Backend is running"})
 
-# Upload to S3 + save metadata
+# Upload to S3 OR Local Storage + save metadata
 @app.route("/upload-s3", methods=["POST"])
 def upload_file_s3():
     try:
@@ -152,14 +158,20 @@ def upload_file_s3():
 
         filename = secure_filename(file.filename)
 
-        s3.upload_fileobj(
-            file,
-            S3_BUCKET_NAME,
-            filename,
-            ExtraArgs={"ContentType": file.content_type or "application/octet-stream"}
-        )
-
-        file_url = f"https://{S3_BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{filename}"
+        if USE_LOCAL_STORAGE:
+            # Save to local storage
+            filepath = os.path.join(LOCAL_UPLOAD_FOLDER, filename)
+            file.save(filepath)
+            file_url = f"/uploads/{filename}"
+        else:
+            # Upload to S3
+            s3.upload_fileobj(
+                file,
+                S3_BUCKET_NAME,
+                filename,
+                ExtraArgs={"ContentType": file.content_type or "application/octet-stream"}
+            )
+            file_url = f"https://{S3_BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{filename}"
 
         db.documents.insert_one({
             "filename": filename,
@@ -171,6 +183,19 @@ def upload_file_s3():
             "file_url": file_url
         })
 
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+# Serve local uploaded files
+@app.route("/uploads/<filename>", methods=["GET"])
+def serve_file(filename):
+    try:
+        from flask import send_file
+        filepath = os.path.join(LOCAL_UPLOAD_FOLDER, secure_filename(filename))
+        if os.path.exists(filepath):
+            return send_file(filepath, as_attachment=False)
+        else:
+            return jsonify({"status": "error", "message": "File not found"}), 404
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
     
